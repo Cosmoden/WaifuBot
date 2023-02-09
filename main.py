@@ -1,69 +1,75 @@
-import threading
-
-from telegram.ext import Updater, MessageHandler, Filters, CommandHandler, ConversationHandler, CallbackQueryHandler
 import logging
-
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
+from config import TOKEN
+from waifuim import WaifuAioClient
 
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.DEBUG
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
 )
-
 logger = logging.getLogger(__name__)
 updater = None
+tags = ['maid', 'waifu', 'oppai', 'selfies', 'uniform', 'mori-calliope', 'marin-kitagawa', 'raiden-shogun', 'ass',
+        'hentai', 'milf', 'oral', 'paizuri', 'ecchi', 'ero']
 
 
-def start(update, context):
-    update.message.reply_text("Привет!")
-    context.user_data['messages'] = []
+async def start(update, context):
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="Начинаем работу."
+    )
 
 
-def help(update, context):
-    update.message.reply_text('''Этот бот может присылать случайные арты в разных категориях \n\n
-    Доступные ''')
+async def new_member(update, context):
+    for member in update.message.new_chat_members:
+        if member.username == 'WaifuBot':
+            await context.bot.send_message(hat_id=update.effective_chat.id,
+                                           text='Всем привет! Надеюсь, мы хорошо проведем время')
 
 
-def write_message(update, context):
-    context.user_data['messages'].append(update.message.text)
+async def bot_help(update, context):
+    await context.bot.send_message(chat_id=update.effective_chat.id,
+                                   text='''Этот бот может присылать случайные арты по тегам \n
+    Напишите команду /image, а после нее - желаемые теги через пробел, например /image maid oppai \n
+    Обычные теги:
+    maid 
+    waifu 
+    oppai 
+    selfies 
+    uniform 
+    mori-calliope 
+    marin-kitagawa 
+    raiden-shogun \n
+    NSFW теги:
+    ass 
+    hentai 
+    milf 
+    oral 
+    paizuri 
+    ecchi
+    ero''')
 
 
-def error(update, context):
+async def error(update, context):
     logger.warning('Update "%s" caused error "%s"', update, context.error)
 
 
-def music(update, context):
-    query = ' '.join(map(str, context.user_data['messages']))
-    context.user_data['messages'] = []
-    text = "Вот ваши рекомендации: / " \
-           "Here are your recommendations: \n"
-    res = fast_search.get_songs(query)
-    for song in res:
-        text += f'{song[1]} - {song[0]} \n'
-    update.message.reply_text(text)
-
-
-def stop(update, context):
-    update.message.reply_text("Приятного прослушивания!")
-    threading.Thread(target=shutdown).start()
-
-
-def main():
-    global updater
-    updater = Updater(TOKEN, use_context=True)
-    dp = updater.dispatcher
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(CommandHandler("help", help))
-    dp.add_handler(CommandHandler("music", music))
-    dp.add_handler(CommandHandler("stop", stop))
-    dp.add_handler(MessageHandler(Filters.text, write_message))
-    dp.add_error_handler(error)
-    updater.start_polling()
-    updater.idle()
-
-
-def shutdown():
-    updater.stop()
-    updater.is_idle = False
+async def image(update, context):
+    wf = WaifuAioClient()
+    for arg in context.args:
+        if arg not in tags:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="Неизвестный тег")
+            return
+    res = await wf.search(included_tags=context.args)
+    await wf.close()
+    await context.bot.send_photo(chat_id=update.effective_chat.id, photo=str(res))
 
 
 if __name__ == '__main__':
-    main()
+    app = ApplicationBuilder().token(TOKEN).build()
+    app.add_handler(CommandHandler('start', start))
+    app.add_handler(CommandHandler('help', bot_help))
+    app.add_handler(CommandHandler('image', image))
+    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, new_member))
+    app.add_error_handler(error)
+    app.run_polling()
